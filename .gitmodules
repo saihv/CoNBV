@@ -1,0 +1,3 @@
+[submodule "lib/cmaes"]
+	path = lib/cmaes
+	url = https://github.com/beniz/libcmaes
