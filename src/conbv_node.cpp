@@ -1,3 +1,5 @@
+#pragma once
+
 #include "libcmaes/cmaes.h"
 #include <iostream>
 #include "conbv/rosUtils.hpp"
@@ -7,14 +9,6 @@
 
 using namespace libcmaes;
 
-FitFunc fsphere = [](const double *x, const int N)
-{
-    double val = 0.0;
-    for (int i=0;i<N;i++)
-        val += x[i]*x[i];
-    return val;
-};
-
 int main(int argc, char *argv[])
 {
 	ros::init(argc, argv, "conbv_node");
@@ -23,7 +17,6 @@ int main(int argc, char *argv[])
 	int nDrones = 2;
 
   	ROSUtils rosUtils(nDrones);
-	Optimizer optimizer;
 
   	ros::Subscriber sub = nh.subscribe<PointCloud>("map", 1, &ROSUtils::mapCallback, &rosUtils);
 
@@ -38,8 +31,8 @@ int main(int argc, char *argv[])
   	while(!rosUtils.mapAvailable || !rosUtils.posesAvailable && ros::ok())
     	ros::spinOnce();
 
-	VisionUtils visionUtils(nDrones, rosUtils.mapPoints);
-	visionUtils.computeProjections(rosUtils.mapPoints);
-	visionUtils.computeVisionHeuristics();
+	Optimizer optimizer(nDrones, rosUtils.mapPoints);
+
+	optimizer.setupProblem();
   	optimizer.run();
 }

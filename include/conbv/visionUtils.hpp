@@ -1,3 +1,5 @@
+#pragma once
+
 #include "opencv2/calib3d.hpp"
 #include "opencv2/core.hpp"
 #include "opencv2/imgproc.hpp"
@@ -69,12 +71,11 @@ public:
                 //std::cout << projectedPoints[i].x << "," << projectedPoints[i].y << std::endl;
                 image.at<uchar>(std::floor(projectedPoints[i].y), std::floor(projectedPoints[i].x)) = 255;
                 projections[droneId][i] = 1;
-                std::cout << (int)projections[droneId][i] << std::endl;
             }
         }
 
-        std::cout << "Processed " << projectedPoints.size() << " projections" << std::endl;
-        std::cout << "Found " << std::count(projections[droneId].begin(),projections[droneId].end(),1) << " valid projections" << std::endl;
+        //std::cout << "Processed " << projectedPoints.size() << " projections" << std::endl;
+        //std::cout << "Found " << std::count(projections[droneId].begin(),projections[droneId].end(),1) << " valid projections" << std::endl;
     }
 
     void computeProjections(std::vector<cv::Point3f>& mapPoints)
@@ -93,7 +94,6 @@ public:
             if (i == 0) {
                 for (int projIdx = 0; projIdx < projections[i].size(); ++projIdx) {
                     sharedProjections[projIdx] = projections[i][projIdx] && projections[i+1][projIdx];
-                    std::cout << projections[i][projIdx] << std::endl;
                 }
             }
             else {

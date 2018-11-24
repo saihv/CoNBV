@@ -1,10 +1,18 @@
+#pragma once
+
 #include "libcmaes/cmaes.h"
+#include "conbv/visionUtils.hpp"
 #include <iostream>
 
 using namespace libcmaes;
 
 class Optimizer {
 public:
+    Optimizer(int &nDrones_, std::vector<cv::Point3f>& mapPoints_) : nDim(nDrones_*4), visionUtils(nDrones_, mapPoints_)
+    {
+        map = &mapPoints_;
+    }
+
     FitFunc fsphere = [](const double *x, const int N)
     {
         double val = 0.0;
@@ -12,6 +20,12 @@ public:
             val += x[i]*x[i];
         return val; 
     };
+
+    void setupProblem()
+    {
+        visionUtils.computeProjections(*map);
+        visionUtils.computeVisionHeuristics();
+    }
 
     int run()
     {
@@ -26,4 +40,9 @@ public:
   	    std::cout << "optimization took " << cmasols.elapsed_time() / 1000.0 << " seconds\n";
   	    return cmasols.run_status();
     }
+
+private:
+    int nDim;
+    std::vector <cv::Point3f> *map;
+    VisionUtils visionUtils;
 };
