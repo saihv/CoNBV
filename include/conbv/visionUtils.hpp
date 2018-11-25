@@ -31,39 +31,27 @@ class VisionUtils
 public:
     VisionUtils(int &numDrones_, std::vector<cv::Point3f>& mapPoints_) : nDrones(numDrones_), projections(numDrones_, std::vector <bool>(mapPoints_.size()))
     {
-
+        initParams();
     }
 
-    void computeProjectionsSingleCamera(int &droneId, std::vector <cv::Point3f> &mapPoints)
+    void computeProjectionsSingleCamera(int &droneId, std::vector <double>& state, std::vector <cv::Point3f> &mapPoints, std::vector <cv::Point2f>& projectedPoints)
     {
         double yaw = 0;
         double pitch = 0;
         double roll = 0;
         tf::Quaternion q = tf::createQuaternionFromRPY(roll, pitch, yaw);
-        geometry_msgs::Quaternion gq;
-        quaternionTFToMsg(q, gq);
-
-        initParams();
-
-        // std::vector <cv::Point2f> projectedPoints;
-
-        int idx = 0;
-
         cv::Mat tvec, rMat, rvec;
 
-        tvec = (cv::Mat_<float>(3,1) << 0.0, 0.0, 0.0);
+        tvec = (cv::Mat_<float>(3,1) << state[0], state[1], state[2]);
         
         tf::Matrix3x3 m(q);
-        // quaternionTFToMsg(q2, gq);
         rMat = (cv::Mat_<float>(3,3) << m.getRow(0).getX(), m.getRow(0).getY(), m.getRow(0).getZ(),
                                             m.getRow(1).getX(), m.getRow(1).getY(), m.getRow(1).getZ(),
                                             m.getRow(2).getX(), m.getRow(2).getY(), m.getRow(2).getZ());
         cv::Rodrigues(rMat, rvec);
-        // std::cout << "Projecting " << mapPoints.size() << " points" << std::endl;
         projectedPoints.clear();
         cv::projectPoints(mapPoints, rvec, tvec, K, dist, projectedPoints);
         image = cv::Scalar::all(0); 
-
         std::fill(projections[droneId].begin(), projections[droneId].end(), 0);
 
         for (int i = 0; i < projectedPoints.size(); ++i) {
@@ -73,20 +61,40 @@ public:
                 projections[droneId][i] = 1;
             }
         }
-
-        //std::cout << "Processed " << projectedPoints.size() << " projections" << std::endl;
-        //std::cout << "Found " << std::count(projections[droneId].begin(),projections[droneId].end(),1) << " valid projections" << std::endl;
+        cv::imwrite("/home/sai/proj.png", image); 
+        /*
+        
+        std::cout << "Processed " << projectedPoints.size() << " projections" << std::endl;
+        std::cout << "Found " << std::count(projections[droneId].begin(),projections[droneId].end(),1) << " valid projections" << std::endl;
+        */
     }
 
-    void computeProjections(std::vector<cv::Point3f>& mapPoints)
+    void computeProjections(const double *x, int dim, std::vector<cv::Point3f>& mapPoints)
     {
+        std::vector <double> state(4);
+        int dimIdx = 0;
+        
         for (int i = 0; i < nDrones; ++i)
         {
-            computeProjectionsSingleCamera(i, mapPoints);
+            state[0] = x[dimIdx];
+            state[1] = x[dimIdx + 1];
+            state[3] = x[dimIdx + 2];
+            state[4] = x[dimIdx + 3];
+        
+            std::vector <cv::Point2f> projectedPoints;
+            computeProjectionsSingleCamera(i, state, mapPoints, projectedPoints);
+
+            if(projectedPoints.size() == 0)
+                heuristics.span = 100;
+            else
+                heuristics.span = computeSpan();
+
+            dimIdx += 4;
         }
+        heuristics.overlap = computeOverlap();
     }
 
-    void computeVisionHeuristics()
+    double computeOverlap()
     {
         std::vector <bool> sharedProjections(projections[0].size());
 
@@ -104,11 +112,39 @@ public:
 
         double numSharedProjections = std::count (sharedProjections.begin(), sharedProjections.end(), 1);
 
-        heuristics.overlap = numSharedProjections/((double)projections[0].size());
-        std::cout << "Overlap is " << heuristics.overlap * 100 << "%" << std::endl;
+        return numSharedProjections/((double)projections[0].size());
+        //std::cout << "Overlap is " << heuristics.overlap * 100 << "%" << std::endl;
     }
 
-    std::vector <cv::Point2f> projectedPoints;
+    double computeSpan()
+    {        
+        int *binPixCount = new int[numBins];
+        double binPixAcc = 0.0;
+        int binIdx = 0;
+        cv::Rect roi;
+
+        for (int y = 0; y < image.cols-binSize; y += binSize) {
+            for (int x = 0; x < image.rows-binSize; x += binSize) {
+                roi = cv::Rect(y, x, binSize, binSize);    
+                binPixCount[binIdx] = cv::countNonZero(image(roi));
+                
+                binPixAcc += binPixCount[binIdx];
+                binIdx++;
+            }
+        }
+
+        double mean = binPixAcc / (double)numBins;
+        double varAcc = 0.0;
+        for (int i = 0; i < numBins; ++i) 
+            varAcc += (binPixCount[i] - mean) * (binPixCount[i] - mean);
+
+        double variance = varAcc / numBins;
+        // free(binPixCount);
+        delete[] binPixCount;
+        return variance;
+    }
+
+    // std::vector <cv::Point2f> projectedPoints;
     std::vector <std::vector <bool> > projections;
     Heuristics heuristics;
 
@@ -116,7 +152,7 @@ private:
     cv::Mat image;
     cv::Mat K, dist;
 
-    int w, h, binSize;
+    int w, h, binSize, numBins;
     float cost;
 
     int nDrones;
@@ -128,5 +164,6 @@ private:
         image = cv::Mat(h, w, CV_8UC1, cv::Scalar(0));
         K = (cv::Mat_<float>(3,3) << 320, 0, 320, 0, 320, 240, 0, 0, 1);
         dist = (cv::Mat_<float>(5,1) << 0.0, 0.0, 0.0, 0.0, 0.0);
+        numBins = (w/binSize - 1) * (h/binSize - 1);
     }
 };

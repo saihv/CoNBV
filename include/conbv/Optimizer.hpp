@@ -21,21 +21,31 @@ public:
         return val; 
     };
 
+    FitFunc fvision = [&](const double *x, const int N)
+    {
+        visionUtils.computeProjections(x, N, *map);
+        double val = 100*(1 - visionUtils.heuristics.overlap) + visionUtils.heuristics.span + abs((x[2] - x[6])); // + 100*visionUtils.heuristics.span;
+
+        std::cout << "Overlap is " << visionUtils.heuristics.overlap*100 << "%" << std::endl;
+        std::cout << "Span factor is " << visionUtils.heuristics.span << std::endl;
+        return val;
+    };
+
     void setupProblem()
     {
-        visionUtils.computeProjections(*map);
-        visionUtils.computeVisionHeuristics();
+        // visionUtils.computeProjections(*map);        
+        // visionUtils.computeVisionHeuristics();
     }
 
     int run()
     {
-        int dim = 10; // problem dimensions.
-  	    std::vector<double> x0(dim,10.0);
-  	    double sigma = 0.1;
-  	    //int lambda = 100; // offsprings at each generation.
-  	    CMAParameters<> cmaparams(x0,sigma);
+        int dim = 8; // problem dimensions.
+  	    std::vector<double> x0(dim, 0.0);
+  	    double sigma = 5;
+  	    int lambda = 100; // offsprings at each generation.
+  	    CMAParameters<> cmaparams(x0, sigma, lambda);
   	    //cmaparams.set_algo(BIPOP_CMAES);
-  	    CMASolutions cmasols = cmaes<>(fsphere,cmaparams);
+  	    CMASolutions cmasols = cmaes<>(fvision, cmaparams);
   	    std::cout << "best solution: " << cmasols << std::endl;
   	    std::cout << "optimization took " << cmasols.elapsed_time() / 1000.0 << " seconds\n";
   	    return cmasols.run_status();

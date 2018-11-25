@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
   	rosUtils.mapAvailable = false;
 	rosUtils.posesAvailable = false;
 
-  	while(!rosUtils.mapAvailable || !rosUtils.posesAvailable && ros::ok())
+  	while(!rosUtils.mapAvailable)
     	ros::spinOnce();
 
 	Optimizer optimizer(nDrones, rosUtils.mapPoints);
