@@ -20,6 +20,7 @@
 
 struct Heuristics
 {
+    double visibility;
     double overlap;
     double span;
     double bzratio;
@@ -40,17 +41,27 @@ public:
         double pitch = 0;
         double roll = 0;
         tf::Quaternion q = tf::createQuaternionFromRPY(roll, pitch, yaw);
-        cv::Mat tvec, rMat, rvec;
+        //cv::Mat tvec, rMat, rvec;
 
-        tvec = (cv::Mat_<float>(3,1) << state[0], state[1], state[2]);
+        //tvec = (cv::Mat_<float>(3,1) << state[0], state[1], state[2]);
+
+        Eigen::Matrix3d rMat;
+        Eigen::Vector3d tvec;
+        Eigen::MatrixXd P(3, 4);
+
+        tvec << -state[0], -state[1], -state[2];
         
         tf::Matrix3x3 m(q);
-        rMat = (cv::Mat_<float>(3,3) << m.getRow(0).getX(), m.getRow(0).getY(), m.getRow(0).getZ(),
+        rMat << m.getRow(0).getX(), m.getRow(0).getY(), m.getRow(0).getZ(),
                                             m.getRow(1).getX(), m.getRow(1).getY(), m.getRow(1).getZ(),
-                                            m.getRow(2).getX(), m.getRow(2).getY(), m.getRow(2).getZ());
-        cv::Rodrigues(rMat, rvec);
+                                            m.getRow(2).getX(), m.getRow(2).getY(), m.getRow(2).getZ();
+        //cv::Rodrigues(rMat, rvec);
         projectedPoints.clear();
-        cv::projectPoints(mapPoints, rvec, tvec, K, dist, projectedPoints);
+        //cv::projectPoints(mapPoints, rvec, tvec, K, dist, projectedPoints);
+
+        P << rMat, tvec;
+        projectPoints(mapPoints, projectedPoints, K, P);
+
         image = cv::Scalar::all(0); 
         std::fill(projections[droneId].begin(), projections[droneId].end(), 0);
 
@@ -61,7 +72,9 @@ public:
                 projections[droneId][i] = 1;
             }
         }
-        cv::imwrite("/home/sai/proj.png", image); 
+
+        std::string filename = "/home/sai/proj_" + std::to_string(droneId) + ".png";
+        cv::imwrite(filename, image); 
         /*
         
         std::cout << "Processed " << projectedPoints.size() << " projections" << std::endl;
@@ -74,24 +87,35 @@ public:
         std::vector <double> state(4);
         int dimIdx = 0;
         
+        int visibility = 0;
+        int span = 0;
+
         for (int i = 0; i < nDrones; ++i)
         {
             state[0] = x[dimIdx];
             state[1] = x[dimIdx + 1];
             state[3] = x[dimIdx + 2];
             state[4] = x[dimIdx + 3];
+
+            std::cout << "Evaluating pose: (" << state[0] << "," << state[1] << "," << state[2] << ")" << std::endl;
         
             std::vector <cv::Point2f> projectedPoints;
             computeProjectionsSingleCamera(i, state, mapPoints, projectedPoints);
 
+            visibility += ((double)projectedPoints.size()/(double)mapPoints.size());
+
+            std::cout << "Visibility: " << visibility * 100 << std::endl;
+
             if(projectedPoints.size() == 0)
-                heuristics.span = 100;
+                span += 100;
             else
-                heuristics.span = computeSpan();
+                span += computeSpan();
 
             dimIdx += 4;
         }
         heuristics.overlap = computeOverlap();
+        heuristics.visibility = (double)visibility/(double)nDrones;
+        heuristics.span = (double)span/(double)nDrones;
     }
 
     double computeOverlap()
@@ -150,7 +174,8 @@ public:
 
 private:
     cv::Mat image;
-    cv::Mat K, dist;
+    //cv::Mat K, dist;
+    Eigen::Matrix3d K;
 
     int w, h, binSize, numBins;
     float cost;
@@ -162,8 +187,36 @@ private:
         w = 640; h = 480;
         binSize = 32;
         image = cv::Mat(h, w, CV_8UC1, cv::Scalar(0));
-        K = (cv::Mat_<float>(3,3) << 320, 0, 320, 0, 320, 240, 0, 0, 1);
-        dist = (cv::Mat_<float>(5,1) << 0.0, 0.0, 0.0, 0.0, 0.0);
+        //K = (cv::Mat_<float>(3,3) << 320, 0, 320, 0, 320, 240, 0, 0, 1);
+        K << 320, 0, 320, 0, 320, 240, 0, 0, 1;
+        //dist = (cv::Mat_<float>(5,1) << 0.0, 0.0, 0.0, 0.0, 0.0);
         numBins = (w/binSize - 1) * (h/binSize - 1);
+    }
+
+    void projectPoints(std::vector<cv::Point3f>& mapPoints, std::vector<cv::Point2f>& imagePoints, Eigen::Matrix3d& K, Eigen::MatrixXd& P)
+    {
+        for (int i = 0; i < mapPoints.size(); ++i) {
+            Eigen::Vector4d objectPt;
+            objectPt << mapPoints[i].x, mapPoints[i].y, mapPoints[i].z , 1;
+
+            Eigen::Vector3d projection;
+            projection = K * P * objectPt;
+
+            // std::cout << "(" << proj(0,0)/proj(2,0) << "," << proj(1,0)/proj(2,0) << "," << proj(2,0) << ")" << std::endl;
+
+            if (isValid(projection)) {
+                imagePoints.push_back(cv::Point2f(projection(0,0)/projection(2,0), projection(1,0)/projection(2,0)));
+            }
+        }
+    }
+
+    bool isValid(Eigen::Vector3d& projection)
+    {
+        if (projection(2,0) > 0) {
+            if (projection(0,0)/projection(2,0) > 0 && projection(0,0)/projection(2,0) < w && projection(1,0)/projection(2,0) > 0 && projection(1,0)/projection(2,0) < h)
+                return true;
+        }
+        else
+            return false;
     }
 };

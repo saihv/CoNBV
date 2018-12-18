@@ -24,10 +24,10 @@ public:
     FitFunc fvision = [&](const double *x, const int N)
     {
         visionUtils.computeProjections(x, N, *map);
-        double val = 100*(1 - visionUtils.heuristics.overlap) + visionUtils.heuristics.span + abs((x[2] - x[6])); // + 100*visionUtils.heuristics.span;
+        double val = 1 - visionUtils.heuristics.visibility; // + 100*visionUtils.heuristics.span;
 
-        std::cout << "Overlap is " << visionUtils.heuristics.overlap*100 << "%" << std::endl;
-        std::cout << "Span factor is " << visionUtils.heuristics.span << std::endl;
+        std::cout << "VISIBILITY is " << val << std::endl;
+        // std::cout << "Span factor is " << visionUtils.heuristics.span << std::endl;
         return val;
     };
 
